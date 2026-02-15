@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
+use App\Http\Controllers\PetaController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -12,7 +12,5 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
-
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [PetaController::class, 'index'])->name('Dashboard.index');
+Route::get('/Dashboard', [PetaController::class, 'index']);
