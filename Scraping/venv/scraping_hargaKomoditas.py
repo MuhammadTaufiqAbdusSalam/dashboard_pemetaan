@@ -17,14 +17,14 @@ cursor = connection.cursor()
 def get_data_tanggal():
   getDate = """
   SELECT tanggal 
-  FROM "komoditas_rata-rata" 
+  FROM "komoditas_rata_rata" 
   ORDER BY tanggal DESC 
   LIMIT 1
 
   """
   cursor.execute(getDate)
   date = cursor.fetchone()  # Ambil satu hasil
-  start_date = date[0] + timedelta(days=1) if date else datetime(2026, 2, 2).date()
+  start_date = date[0] + timedelta(days=1) if date else datetime(2026, 4, 30).date()
   print("Mulai dari tanggal: ", start_date)
   return start_date
 
@@ -136,7 +136,7 @@ list_kabkota = ["bangkalankab", "banyuwangikab", "blitarkab", "bojonegorokab", "
     "malangkota", "mojokertokota", "pasuruankota", "probolinggokota", "surabayakota"]
 
 query_mean = """
-INSERT INTO "komoditas_rata-rata"
+INSERT INTO "komoditas_rata_rata"
 (tanggal,kategori_id,komoditas_nama,satuan,harga)
 VALUES (%s, %s, %s, %s, %s)
 ON CONFLICT (tanggal, kategori_id, komoditas_nama) DO NOTHING

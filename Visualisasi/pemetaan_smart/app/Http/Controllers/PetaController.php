@@ -11,25 +11,33 @@ class PetaController extends Controller
 {
     public function index(Request $request)
     {
-        $kategoriList = KategoriKomoditas::orderBy('kategori')->get();
-        $selectedKategori = $request->input('kategori_id', $kategoriList->first()->id ?? null);
+        // Ambil daftar komoditas unik dari tabel komoditas
+        $komoditasList = DB::table('komoditas')
+            ->select('komoditas_nama')
+            ->distinct()
+            ->orderBy('komoditas_nama')
+            ->get();
         
-        return view('Dashboard.index', compact('kategoriList', 'selectedKategori'));
+        $selectedKomoditas = $request->input('komoditas_nama', $komoditasList->first()->komoditas_nama ?? null);
+        
+        return view('Dashboard.index', compact('komoditasList', 'selectedKomoditas'));
     }
     
     public function getData(Request $request)
     {
-        $kategoriId = $request->input('kategori_id');
+        $komoditasNama = $request->input('komoditas_nama');
+        $tanggal = $request->input('tanggal', now()->format('Y-m-d'));
         
-        if (!$kategoriId) {
-            return response()->json(['error' => 'Kategori harus dipilih'], 400);
+        if (!$komoditasNama) {
+            return response()->json(['error' => 'Komoditas harus dipilih'], 400);
         }
         
-        // Hitung rata-rata harga per kabupaten/kota untuk kategori tertentu
+        // Hitung rata-rata harga per kabupaten/kota untuk komoditas tertentu pada tanggal spesifik
         $dataKabupaten = DB::table('komoditas as k')
             ->join('pasar as p', 'k.pasar_id', '=', 'p.id')
             ->join('kabupaten_kota as kk', 'p.kabupaten_kota_id', '=', 'kk.id')
-            ->where('k.kategori_id', $kategoriId)
+            ->where('k.komoditas_nama', $komoditasNama)
+            ->whereDate('k.tanggal', '=', $tanggal)
             ->select(
                 'kk.id',
                 'kk.nama',
@@ -40,21 +48,37 @@ class PetaController extends Controller
             ->groupBy('kk.id', 'kk.nama', 'kk.keycode')
             ->get();
         
-        if ($dataKabupaten->isEmpty()) {
-            return response()->json([
-                'data' => [],
-                'rata_rata_keseluruhan' => 0,
-                'message' => 'Tidak ada data untuk kategori ini'
-            ]);
-        }
+        // Ambil semua kabupaten/kota
+        $allKabupaten = KabupatenKota::all();
         
-        // Hitung rata-rata keseluruhan untuk kategori ini
-        $rataRataKeseluruhan = $dataKabupaten->avg('avg_harga');
+        // Hitung rata-rata keseluruhan hanya dari kabupaten yang punya data dengan harga > 0
+        $dataWithPrice = $dataKabupaten->filter(function($item) {
+            return $item->avg_harga > 0;
+        });
+        
+        $rataRataKeseluruhan = $dataWithPrice->isEmpty() ? 0 : $dataWithPrice->avg('avg_harga');
         
         // Tentukan kategori warna untuk setiap kabupaten
-        $result = $dataKabupaten->map(function($item) use ($rataRataKeseluruhan) {
-            $harga = $item->avg_harga;
-            $selisih = (($harga - $rataRataKeseluruhan) / $rataRataKeseluruhan) * 100;
+        $result = $allKabupaten->map(function($kabupaten) use ($dataKabupaten, $rataRataKeseluruhan) {
+            // Cari data untuk kabupaten ini
+            $data = $dataKabupaten->firstWhere('id', $kabupaten->id);
+            
+            // Jika tidak ada data atau harga 0, beri warna abu-abu
+            if (!$data || $data->avg_harga == 0) {
+                return [
+                    'id' => $kabupaten->id,
+                    'nama' => $kabupaten->nama,
+                    'keycode' => $kabupaten->keycode,
+                    'avg_harga' => 0,
+                    'jumlah_data' => 0,
+                    'selisih_persen' => 0,
+                    'kategori_harga' => 'Tidak Ada Data',
+                    'color' => '#9E9E9E', // Abu-abu
+                ];
+            }
+            
+            $harga = $data->avg_harga;
+            $selisih = $rataRataKeseluruhan > 0 ? (($harga - $rataRataKeseluruhan) / $rataRataKeseluruhan) * 100 : 0;
             
             // Tentukan warna berdasarkan selisih
             if ($selisih < -10) {
@@ -69,11 +93,11 @@ class PetaController extends Controller
             }
             
             return [
-                'id' => $item->id,
-                'nama' => $item->nama,
-                'keycode' => $item->keycode,
-                'avg_harga' => round($item->avg_harga, 0),
-                'jumlah_data' => $item->jumlah_data,
+                'id' => $data->id,
+                'nama' => $data->nama,
+                'keycode' => $data->keycode,
+                'avg_harga' => round($data->avg_harga, 0),
+                'jumlah_data' => $data->jumlah_data,
                 'selisih_persen' => round($selisih, 2),
                 'kategori_harga' => $kategori,
                 'color' => $color,
