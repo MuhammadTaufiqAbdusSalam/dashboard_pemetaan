@@ -23,24 +23,24 @@ class GeminiNarasiService
      * Generate narasi stabilitas harga menggunakan Gemini AI.
      * Hasilnya di-cache selama 24 jam.
      */
-    public function generateNarasi(array $summary, string $tanggalAkhir): ?string
+    public function generateNarasi(array $summary, string $tanggalAwal, string $tanggalAkhir): ?string
     {
-        $cacheKey = 'narasi_stabilitas_' . md5(json_encode($summary) . $tanggalAkhir);
+        $cacheKey = 'narasi_stabilitas_' . md5(json_encode($summary) . $tanggalAwal . '_' . $tanggalAkhir);
 
-        return Cache::remember($cacheKey, now()->addHours(24), function () use ($summary, $tanggalAkhir) {
-            return $this->callGeminiAPI($summary, $tanggalAkhir);
+        return Cache::remember($cacheKey, now()->addHours(24), function () use ($summary, $tanggalAwal, $tanggalAkhir) {
+            return $this->callGeminiAPI($summary, $tanggalAwal, $tanggalAkhir);
         });
     }
 
     /**
      * Force generate tanpa cache (untuk refresh manual)
      */
-    public function forceGenerateNarasi(array $summary, string $tanggalAkhir): ?string
+    public function forceGenerateNarasi(array $summary, string $tanggalAwal, string $tanggalAkhir): ?string
     {
-        $cacheKey = 'narasi_stabilitas_' . md5(json_encode($summary) . $tanggalAkhir);
+        $cacheKey = 'narasi_stabilitas_' . md5(json_encode($summary) . $tanggalAwal . '_' . $tanggalAkhir);
         Cache::forget($cacheKey);
 
-        $result = $this->callGeminiAPI($summary, $tanggalAkhir);
+        $result = $this->callGeminiAPI($summary, $tanggalAwal, $tanggalAkhir);
 
         if ($result) {
             Cache::put($cacheKey, $result, now()->addHours(24));
@@ -52,14 +52,14 @@ class GeminiNarasiService
     /**
      * Panggil Gemini API untuk generate narasi
      */
-    private function callGeminiAPI(array $summary, string $tanggalAkhir): ?string
+    private function callGeminiAPI(array $summary, string $tanggalAwal, string $tanggalAkhir): ?string
     {
         if (empty($this->apiKey)) {
             Log::warning('Gemini API key belum dikonfigurasi');
-            return $this->generateFallbackNarasi($summary, $tanggalAkhir);
+            return $this->generateFallbackNarasi($summary, $tanggalAwal, $tanggalAkhir);
         }
 
-        $prompt = $this->buildPrompt($summary, $tanggalAkhir);
+        $prompt = $this->buildPrompt($summary, $tanggalAwal, $tanggalAkhir);
 
         try {
             $url = "{$this->baseUrl}/models/{$this->model}:generateContent?key={$this->apiKey}";
@@ -94,17 +94,17 @@ class GeminiNarasiService
                 'body' => $response->body(),
             ]);
 
-            return $this->generateFallbackNarasi($summary, $tanggalAkhir);
+            return $this->generateFallbackNarasi($summary, $tanggalAwal, $tanggalAkhir);
         } catch (\Exception $e) {
             Log::error('Gemini API exception: ' . $e->getMessage());
-            return $this->generateFallbackNarasi($summary, $tanggalAkhir);
+            return $this->generateFallbackNarasi($summary, $tanggalAwal, $tanggalAkhir);
         }
     }
 
     /**
      * Bangun prompt untuk Gemini AI
      */
-    private function buildPrompt(array $summary, string $tanggalAkhir): string
+    private function buildPrompt(array $summary, string $tanggalAwal, string $tanggalAkhir): string
     {
         $topStabil = $summary['top_stabil'] ?? [];
         $topTidakStabil = $summary['top_tidak_stabil'] ?? [];
@@ -140,13 +140,13 @@ class GeminiNarasiService
             $bestKabupatenText .= "{$num}. {$item['kabupaten_nama']} - Skor rata-rata: {$item['avg_skor_stabilitas']}, CV rata-rata: {$item['avg_cv']}%, Stabil: {$item['jumlah_stabil']}/{$item['jumlah_komoditas']} komoditas\n";
         }
 
-        $tanggalAwal = date('d M Y', strtotime($tanggalAkhir . ' -6 days'));
+        $tanggalAwalFormatted = date('d M Y', strtotime($tanggalAwal));
         $tanggalAkhirFormatted = date('d M Y', strtotime($tanggalAkhir));
 
         $prompt = <<<PROMPT
 Kamu adalah analis harga komoditas pangan profesional untuk Provinsi Jawa Timur, Indonesia. Buatkan narasi informatif tentang stabilitas harga komoditas berdasarkan data analisis berikut.
 
-PERIODE ANALISIS: {$tanggalAwal} sampai {$tanggalAkhirFormatted} (7 hari terakhir)
+PERIODE ANALISIS: {$tanggalAwalFormatted} sampai {$tanggalAkhirFormatted}
 
 STATISTIK UMUM:
 - Total pasangan komoditas-wilayah yang dianalisis: {$statistikUmum['total_data_analisis']}
@@ -185,7 +185,7 @@ PROMPT;
     /**
      * Narasi fallback jika Gemini API tidak tersedia
      */
-    private function generateFallbackNarasi(array $summary, string $tanggalAkhir): string
+    private function generateFallbackNarasi(array $summary, string $tanggalAwal, string $tanggalAkhir): string
     {
         $statistik = $summary['statistik_umum'] ?? [];
         $topStabil = $summary['top_stabil'] ?? [];
@@ -194,17 +194,17 @@ PROMPT;
         $ringkasanKabupaten = $summary['ringkasan_kabupaten'] ?? [];
 
         if (empty($statistik)) {
-            return 'Data analisis stabilitas harga belum tersedia. Pastikan terdapat data harga komoditas dalam 7 hari terakhir.';
+            return 'Data analisis stabilitas harga belum tersedia. Pastikan terdapat data harga komoditas dalam periode yang dipilih.';
         }
 
-        $tanggalAwal = date('d M Y', strtotime($tanggalAkhir . ' -6 days'));
+        $tanggalAwalFormatted = date('d M Y', strtotime($tanggalAwal));
         $tanggalAkhirFormatted = date('d M Y', strtotime($tanggalAkhir));
 
         $totalStabil = ($statistik['jumlah_sangat_stabil'] ?? 0) + ($statistik['jumlah_stabil'] ?? 0);
         $totalAnalisis = $statistik['total_data_analisis'] ?? 0;
         $persenStabil = $totalAnalisis > 0 ? round(($totalStabil / $totalAnalisis) * 100, 1) : 0;
 
-        $narasi = "Berdasarkan analisis data harga komoditas di Provinsi Jawa Timur periode {$tanggalAwal} hingga {$tanggalAkhirFormatted}, ";
+        $narasi = "Berdasarkan analisis data harga komoditas di Provinsi Jawa Timur periode {$tanggalAwalFormatted} hingga {$tanggalAkhirFormatted}, ";
         $narasi .= "dari total {$totalAnalisis} pasangan komoditas-wilayah yang dianalisis, sebanyak {$persenStabil}% menunjukkan harga yang stabil. ";
         $narasi .= "Koefisien variasi rata-rata keseluruhan tercatat sebesar {$statistik['avg_cv_keseluruhan']}% dengan perubahan harga harian rata-rata {$statistik['avg_daily_change_keseluruhan']}%.\n\n";
 

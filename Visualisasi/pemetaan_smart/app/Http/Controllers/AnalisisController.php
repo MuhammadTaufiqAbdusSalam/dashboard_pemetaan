@@ -28,15 +28,20 @@ class AnalisisController extends Controller
      */
     public function getAnalisis(Request $request)
     {
-        $tanggal = $request->input('tanggal', now()->format('Y-m-d'));
+        $tanggalAkhir = $request->input('tanggal_akhir', $request->input('tanggal', now()->format('Y-m-d')));
+        $tanggalAwal = $request->input('tanggal_awal');
+
+        if (!$tanggalAwal) {
+            $tanggalAwal = date('Y-m-d', strtotime($tanggalAkhir . ' -6 days'));
+        }
 
         // 1. Analisis Statistik Stabilitas Harga
-        $hasilAnalisis = $this->analisisService->analyzeAll($tanggal);
+        $hasilAnalisis = $this->analisisService->analyzeAll($tanggalAwal, $tanggalAkhir);
 
         if (empty($hasilAnalisis)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tidak ada data yang cukup untuk analisis. Diperlukan minimal 2 hari data dalam 7 hari terakhir.',
+                'message' => 'Tidak ada data yang cukup untuk analisis pada periode yang dipilih.',
                 'data' => null,
                 'narasi' => null,
             ]);
@@ -49,15 +54,15 @@ class AnalisisController extends Controller
         $summary = $this->ruleService->generateSummary($evaluatedData);
 
         // 4 & 5. Gemini AI - Natural Language Generation
-        $narasi = $this->geminiService->generateNarasi($summary, $tanggal);
+        $narasi = $this->geminiService->generateNarasi($summary, $tanggalAwal, $tanggalAkhir);
 
         // 6. Output
         return response()->json([
             'success' => true,
-            'tanggal_analisis' => $tanggal,
+            'tanggal_analisis' => $tanggalAkhir,
             'periode' => [
-                'dari' => date('Y-m-d', strtotime($tanggal . ' -6 days')),
-                'sampai' => $tanggal,
+                'dari' => $tanggalAwal,
+                'sampai' => $tanggalAkhir,
             ],
             'statistik_umum' => $summary['statistik_umum'],
             'top_stabil' => array_map(function ($item) {
@@ -95,9 +100,14 @@ class AnalisisController extends Controller
      */
     public function refreshNarasi(Request $request)
     {
-        $tanggal = $request->input('tanggal', now()->format('Y-m-d'));
+        $tanggalAkhir = $request->input('tanggal_akhir', $request->input('tanggal', now()->format('Y-m-d')));
+        $tanggalAwal = $request->input('tanggal_awal');
 
-        $hasilAnalisis = $this->analisisService->analyzeAll($tanggal);
+        if (!$tanggalAwal) {
+            $tanggalAwal = date('Y-m-d', strtotime($tanggalAkhir . ' -6 days'));
+        }
+
+        $hasilAnalisis = $this->analisisService->analyzeAll($tanggalAwal, $tanggalAkhir);
 
         if (empty($hasilAnalisis)) {
             return response()->json([
@@ -109,7 +119,7 @@ class AnalisisController extends Controller
 
         $evaluatedData = $this->ruleService->evaluate($hasilAnalisis);
         $summary = $this->ruleService->generateSummary($evaluatedData);
-        $narasi = $this->geminiService->forceGenerateNarasi($summary, $tanggal);
+        $narasi = $this->geminiService->forceGenerateNarasi($summary, $tanggalAwal, $tanggalAkhir);
 
         return response()->json([
             'success' => true,

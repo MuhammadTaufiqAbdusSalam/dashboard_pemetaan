@@ -566,8 +566,13 @@
                 </div>
 
                 <div class="sidebar-group">
-                    <label for="tanggal">Pilih Tanggal:</label>
-                    <input type="date" id="tanggal" name="tanggal" class="date-input">
+                    <label for="tanggal_awal">Tanggal Awal:</label>
+                    <input type="date" id="tanggal_awal" name="tanggal_awal" class="date-input">
+                </div>
+
+                <div class="sidebar-group">
+                    <label for="tanggal_akhir">Tanggal Akhir:</label>
+                    <input type="date" id="tanggal_akhir" name="tanggal_akhir" class="date-input">
                 </div>
 
                 <div class="sidebar-group" style="background: #f0f7ff; padding: 12px; border-radius: 6px; margin-top: 15px;">
@@ -643,7 +648,7 @@
         <!-- AI Analisis Stabilitas Harga Section -->
         <div class="ai-section" id="aiSection">
             <div class="ai-section-header">
-                <h3>🤖 Analisis AI - Stabilitas Harga 7 Hari Terakhir</h3>
+                <h3>🤖 Analisis AI - Stabilitas Harga (<span id="periodeAnalisisText">-</span>)</h3>
                 <div>
                     <span class="ai-badge">Powered by Gemini AI</span>
                     <button class="btn-refresh-narasi" id="btnRefreshNarasi" onclick="refreshNarasi()" title="Perbarui narasi AI">
@@ -795,8 +800,13 @@
             'Kota Probolinggo': [-7.7543, 113.2159]
         };
         
-        // Set tanggal default ke hari ini
-        document.getElementById('tanggal').valueAsDate = new Date();
+        // Set tanggal default ke hari ini (akhir) dan 6 hari yang lalu (awal)
+        const today = new Date();
+        const sixDaysAgo = new Date();
+        sixDaysAgo.setDate(today.getDate() - 6);
+
+        document.getElementById('tanggal_akhir').valueAsDate = today;
+        document.getElementById('tanggal_awal').valueAsDate = sixDaysAgo;
         
         // Fungsi untuk update tabel harga mean
         function updatePriceTable(data) {
@@ -871,18 +881,13 @@
         // Fungsi untuk memuat data
         function loadData() {
             const komoditasNama = document.getElementById('komoditas').value;
-            const tanggal = document.getElementById('tanggal').value;
+            const tanggalAwal = document.getElementById('tanggal_awal').value;
+            const tanggalAkhir = document.getElementById('tanggal_akhir').value;
             const loading = document.getElementById('loading');
             const mapElement = document.getElementById('map');
             
-            if (!tanggal) {
-                alert('Silakan pilih tanggal terlebih dahulu');
-                loading.style.display = 'none';
-                return;
-            }
-            
-            if (!tanggal) {
-                alert('Silakan pilih tanggal terlebih dahulu');
+            if (!tanggalAwal || !tanggalAkhir) {
+                alert('Silakan pilih tanggal awal dan tanggal akhir');
                 loading.style.display = 'none';
                 return;
             }
@@ -895,7 +900,7 @@
             markers = [];
             
             // Fetch data dari API
-            fetch(`/api/peta/data?komoditas_nama=${encodeURIComponent(komoditasNama)}&tanggal=${tanggal}`, {
+            fetch(`/api/peta/data?komoditas_nama=${encodeURIComponent(komoditasNama)}&tanggal_awal=${tanggalAwal}&tanggal_akhir=${tanggalAkhir}`, {
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
@@ -926,10 +931,12 @@
                 }
                 
                 // Update info tanggal
-                const dateObj = new Date(tanggal);
-                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                const formattedDate = dateObj.toLocaleDateString('id-ID', options);
-                document.getElementById('periodInfo').textContent = formattedDate;
+                const dateAwalObj = new Date(tanggalAwal);
+                const dateAkhirObj = new Date(tanggalAkhir);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                const formattedAwal = dateAwalObj.toLocaleDateString('id-ID', options);
+                const formattedAkhir = dateAkhirObj.toLocaleDateString('id-ID', options);
+                document.getElementById('periodInfo').textContent = `${formattedAwal} - ${formattedAkhir}`;
                 
                 // Update tabel harga mean
                 updatePriceTable(result.data);
@@ -1023,7 +1030,14 @@
         
         // Event listener untuk perubahan komoditas dan tanggal
         document.getElementById('komoditas').addEventListener('change', loadData);
-        document.getElementById('tanggal').addEventListener('change', loadData);
+        document.getElementById('tanggal_awal').addEventListener('change', () => {
+            loadData();
+            loadAnalisisAI();
+        });
+        document.getElementById('tanggal_akhir').addEventListener('change', () => {
+            loadData();
+            loadAnalisisAI();
+        });
         
         // Load data awal
         loadData();
@@ -1033,14 +1047,15 @@
         // ========================================
         
         function loadAnalisisAI() {
-            const tanggal = document.getElementById('tanggal').value;
-            if (!tanggal) return;
+            const tanggalAwal = document.getElementById('tanggal_awal').value;
+            const tanggalAkhir = document.getElementById('tanggal_akhir').value;
+            if (!tanggalAwal || !tanggalAkhir) return;
 
             const narasiBox = document.getElementById('narasiBox');
             narasiBox.className = 'ai-narasi-box loading-narasi';
             narasiBox.textContent = '⏳ Memuat analisis AI stabilitas harga...';
 
-            fetch(`/api/analisis/stabilitas?tanggal=${tanggal}`, {
+            fetch(`/api/analisis/stabilitas?tanggal_awal=${tanggalAwal}&tanggal_akhir=${tanggalAkhir}`, {
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 }
@@ -1051,6 +1066,7 @@
                     narasiBox.className = 'ai-narasi-box';
                     narasiBox.textContent = result.message || 'Belum ada data untuk analisis.';
                     resetStatsAndTables();
+                    document.getElementById('periodeAnalisisText').textContent = '-';
                     return;
                 }
 
@@ -1060,6 +1076,13 @@
                 document.getElementById('statStabil').textContent = stats.jumlah_stabil || 0;
                 document.getElementById('statCukupStabil').textContent = stats.jumlah_cukup_stabil || 0;
                 document.getElementById('statTidakStabil').textContent = stats.jumlah_tidak_stabil || 0;
+
+                // Update periode analisis text
+                const dateAwalObj = new Date(result.periode.dari);
+                const dateAkhirObj = new Date(result.periode.sampai);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                document.getElementById('periodeAnalisisText').textContent = 
+                    `${dateAwalObj.toLocaleDateString('id-ID', options)} s/d ${dateAkhirObj.toLocaleDateString('id-ID', options)}`;
 
                 // Update narasi
                 narasiBox.className = 'ai-narasi-box';
@@ -1110,8 +1133,9 @@
         }
 
         function refreshNarasi() {
-            const tanggal = document.getElementById('tanggal').value;
-            if (!tanggal) return;
+            const tanggalAwal = document.getElementById('tanggal_awal').value;
+            const tanggalAkhir = document.getElementById('tanggal_akhir').value;
+            if (!tanggalAwal || !tanggalAkhir) return;
 
             const btn = document.getElementById('btnRefreshNarasi');
             const narasiBox = document.getElementById('narasiBox');
@@ -1127,7 +1151,10 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                 },
-                body: JSON.stringify({ tanggal: tanggal })
+                body: JSON.stringify({ 
+                    tanggal_awal: tanggalAwal,
+                    tanggal_akhir: tanggalAkhir
+                })
             })
             .then(response => response.json())
             .then(result => {
@@ -1143,9 +1170,6 @@
                 btn.textContent = '🔄 Refresh';
             });
         }
-
-        // Load AI analysis on page load and when date changes
-        document.getElementById('tanggal').addEventListener('change', loadAnalisisAI);
 
         // Load AI analysis after a short delay to not block the map loading
         setTimeout(loadAnalisisAI, 500);

@@ -26,19 +26,27 @@ class PetaController extends Controller
     public function getData(Request $request)
     {
         $komoditasNama = $request->input('komoditas_nama');
-        $tanggal = $request->input('tanggal', now()->format('Y-m-d'));
+        $tanggalAwal = $request->input('tanggal_awal');
+        $tanggalAkhir = $request->input('tanggal_akhir');
         
         if (!$komoditasNama) {
             return response()->json(['error' => 'Komoditas harus dipilih'], 400);
         }
         
-        // Hitung rata-rata harga per kabupaten/kota untuk komoditas tertentu pada tanggal spesifik
-        $dataKabupaten = DB::table('komoditas as k')
+        // Hitung rata-rata harga per kabupaten/kota untuk komoditas tertentu pada tanggal/periode spesifik
+        $query = DB::table('komoditas as k')
             ->join('pasar as p', 'k.pasar_id', '=', 'p.id')
             ->join('kabupaten_kota as kk', 'p.kabupaten_kota_id', '=', 'kk.id')
-            ->where('k.komoditas_nama', $komoditasNama)
-            ->whereDate('k.tanggal', '=', $tanggal)
-            ->select(
+            ->where('k.komoditas_nama', $komoditasNama);
+
+        if ($tanggalAwal && $tanggalAkhir) {
+            $query->whereBetween('k.tanggal', [$tanggalAwal, $tanggalAkhir]);
+        } else {
+            $tanggal = $request->input('tanggal', now()->format('Y-m-d'));
+            $query->whereDate('k.tanggal', '=', $tanggal);
+        }
+
+        $dataKabupaten = $query->select(
                 'kk.id',
                 'kk.nama',
                 'kk.keycode',

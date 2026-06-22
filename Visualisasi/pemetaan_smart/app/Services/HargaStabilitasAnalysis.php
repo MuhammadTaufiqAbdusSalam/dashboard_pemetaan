@@ -13,10 +13,10 @@ class HargaStabilitasAnalysis
      * Menghitung: rata-rata harga, standar deviasi, koefisien variasi (CV),
      * perubahan harga harian, dan range harga.
      */
-    public function analyzeAll(?string $tanggalAkhir = null): array
+    public function analyzeAll(?string $tanggalAwal = null, ?string $tanggalAkhir = null): array
     {
         $tanggalAkhir = $tanggalAkhir ? Carbon::parse($tanggalAkhir) : Carbon::today();
-        $tanggalAwal = $tanggalAkhir->copy()->subDays(6); // 7 hari termasuk hari ini
+        $tanggalAwal = $tanggalAwal ? Carbon::parse($tanggalAwal) : $tanggalAkhir->copy()->subDays(6); // 7 hari termasuk hari ini
 
         // Ambil data harga per komoditas per kabupaten per tanggal (7 hari terakhir)
         $rawData = DB::table('komoditas as k')
