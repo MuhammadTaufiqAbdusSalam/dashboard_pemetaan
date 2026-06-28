@@ -14,3 +14,4 @@ use App\Http\Controllers\PetaController;
 */
 Route::get('/', [PetaController::class, 'index'])->name('Dashboard.index');
 Route::get('/Dashboard', [PetaController::class, 'index']);
+Route::get('/Dashboard/chart', [PetaController::class, 'chart'])->name('Dashboard.chart');

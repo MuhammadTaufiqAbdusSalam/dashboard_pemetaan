@@ -18,6 +18,7 @@ use App\Http\Controllers\AnalisisController;
 */
 
 Route::get('/peta/data', [PetaController::class, 'getData']);
+Route::get('/peta/chart-data', [PetaController::class, 'getChartData']);
 
 // API Analisis Stabilitas Harga AI
 Route::get('/analisis/stabilitas', [AnalisisController::class, 'getAnalisis']);

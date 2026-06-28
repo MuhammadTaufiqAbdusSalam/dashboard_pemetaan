@@ -35,6 +35,16 @@
             border-radius: 10px;
             margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .header-title {
+            flex: 1;
+            min-width: 280px;
         }
         
         .header h1 {
@@ -45,6 +55,38 @@
         .header p {
             opacity: 0.9;
             font-size: 14px;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-btn.active {
+            background: white;
+            color: #764ba2;
+            border-color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
         }
         
         .form-group {
@@ -544,8 +586,18 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🗺️ Peta Harga Komoditas Jawa Timur</h1>
-            <p>Visualisasi harga komoditas per kabupaten/kota</p>
+            <div class="header-title">
+                <h1>🗺️ Peta Harga Komoditas Jawa Timur</h1>
+                <p>Visualisasi harga komoditas per kabupaten/kota</p>
+            </div>
+            <div class="nav-buttons">
+                <a href="{{ route('Dashboard.index') }}" class="nav-btn active">
+                    🗺️ Peta Wilayah
+                </a>
+                <a href="{{ route('Dashboard.chart') }}" class="nav-btn">
+                    📊 Grafik Tren
+                </a>
+            </div>
         </div>
         
         
@@ -738,8 +790,8 @@
             zoom: 9,
             minZoom: 8,        // Zoom minimal
             maxZoom: 11,       // Zoom maksimal
-            maxBounds: jatimBounds,     // Batasi area
-            maxBoundsViscosity: 1.0,    // Tidak bisa keluar dari bounds
+            // maxBounds: jatimBounds,     // Batasi area
+            // maxBoundsViscosity: 1.0,    // Tidak bisa keluar dari bounds
             dragging: true,             // ✅ Bisa digeser dalam batas
             scrollWheelZoom: true,      // ✅ Zoom dengan scroll
             doubleClickZoom: true,      // ✅ Double click zoom

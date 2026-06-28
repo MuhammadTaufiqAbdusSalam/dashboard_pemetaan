@@ -37,7 +37,8 @@ class PetaController extends Controller
         $query = DB::table('komoditas as k')
             ->join('pasar as p', 'k.pasar_id', '=', 'p.id')
             ->join('kabupaten_kota as kk', 'p.kabupaten_kota_id', '=', 'kk.id')
-            ->where('k.komoditas_nama', $komoditasNama);
+            ->where('k.komoditas_nama', $komoditasNama)
+            ->where('k.harga', '>', 0);
 
         if ($tanggalAwal && $tanggalAkhir) {
             $query->whereBetween('k.tanggal', [$tanggalAwal, $tanggalAkhir]);
@@ -114,6 +115,116 @@ class PetaController extends Controller
         
         return response()->json([
             'data' => $result,
+            'rata_rata_keseluruhan' => round($rataRataKeseluruhan, 0),
+        ]);
+    }
+    //chart
+    public function chart(Request $request)
+    {
+        $komoditasList = DB::table('komoditas')
+            ->select('komoditas_nama')
+            ->distinct()
+            ->orderBy('komoditas_nama')
+            ->get();
+            
+        $kabupatenList = DB::table('kabupaten_kota')
+            ->select('id', 'nama')
+            ->orderBy('nama')
+            ->get();
+            
+        $selectedKomoditas = $request->input('komoditas_nama', $komoditasList->first()->komoditas_nama ?? null);
+        $selectedKabupaten = $request->input('kabupaten_id');
+        
+        return view('Dashboard.chart', compact('komoditasList', 'kabupatenList', 'selectedKomoditas', 'selectedKabupaten'));
+    }
+
+    public function getChartData(Request $request)
+    {
+        $komoditasNama = $request->input('komoditas_nama');
+        $kabupatenId = $request->input('kabupaten_id');
+        $tanggalAwal = $request->input('tanggal_awal');
+        $tanggalAkhir = $request->input('tanggal_akhir');
+        
+        if (!$komoditasNama) {
+            return response()->json(['error' => 'Komoditas harus dipilih'], 400);
+        }
+        
+        // 1. Rata-rata Jawa Timur (seluruh kabupaten/kota) per tanggal
+        $jatimQuery = DB::table('komoditas as k')
+            ->where('k.komoditas_nama', $komoditasNama)
+            ->where('k.harga', '>', 0);
+            
+        if ($tanggalAwal && $tanggalAkhir) {
+            $jatimQuery->whereBetween('k.tanggal', [$tanggalAwal, $tanggalAkhir]);
+        }
+        
+        $jatimData = $jatimQuery->select(
+                'k.tanggal',
+                DB::raw('ROUND(AVG(k.harga), 0) as avg_harga')
+            )
+            ->groupBy('k.tanggal')
+            ->orderBy('k.tanggal')
+            ->get();
+            
+        // 2. Rata-rata kabupaten terpilih per tanggal
+        $kabupatenData = [];
+        if ($kabupatenId) {
+            $kabupatenQuery = DB::table('komoditas as k')
+                ->join('pasar as p', 'k.pasar_id', '=', 'p.id')
+                ->where('k.komoditas_nama', $komoditasNama)
+                ->where('p.kabupaten_kota_id', $kabupatenId)
+                ->where('k.harga', '>', 0);
+                
+            if ($tanggalAwal && $tanggalAkhir) {
+                $kabupatenQuery->whereBetween('k.tanggal', [$tanggalAwal, $tanggalAkhir]);
+            }
+            
+            $kabupatenData = $kabupatenQuery->select(
+                    'k.tanggal',
+                    DB::raw('ROUND(AVG(k.harga), 0) as avg_harga')
+                )
+                ->groupBy('k.tanggal')
+                ->orderBy('k.tanggal')
+                ->get();
+        }
+        
+        // 3. Rata-rata per kabupaten untuk perbandingan (bar chart) pada periode tersebut
+        $comparisonQuery = DB::table('komoditas as k')
+            ->join('pasar as p', 'k.pasar_id', '=', 'p.id')
+            ->join('kabupaten_kota as kk', 'p.kabupaten_kota_id', '=', 'kk.id')
+            ->where('k.komoditas_nama', $komoditasNama)
+            ->where('k.harga', '>', 0);
+            
+        if ($tanggalAwal && $tanggalAkhir) {
+            $comparisonQuery->whereBetween('k.tanggal', [$tanggalAwal, $tanggalAkhir]);
+        }
+        
+        $comparisonData = $comparisonQuery->select(
+                'kk.nama as kabupaten_nama',
+                DB::raw('AVG(k.harga) as avg_harga')
+            )
+            ->groupBy('kk.id', 'kk.nama')
+            ->get();
+
+        // Hitung rata-rata keseluruhan (rata-rata dari rata-rata kabupaten)
+        $dataWithPrice = $comparisonData->filter(function($item) {
+            return $item->avg_harga > 0;
+        });
+        
+        $rataRataKeseluruhan = $dataWithPrice->isEmpty() ? 0 : $dataWithPrice->avg('avg_harga');
+
+        // Format untuk perbandingan bar chart
+        $formattedComparison = $comparisonData->map(function($item) {
+            return [
+                'kabupaten_nama' => $item->kabupaten_nama,
+                'avg_harga' => round($item->avg_harga, 0)
+            ];
+        })->sortByDesc('avg_harga')->values();
+            
+        return response()->json([
+            'jatim' => $jatimData,
+            'kabupaten' => $kabupatenData,
+            'perbandingan' => $formattedComparison,
             'rata_rata_keseluruhan' => round($rataRataKeseluruhan, 0),
         ]);
     }
